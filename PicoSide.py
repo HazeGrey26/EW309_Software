@@ -1,8 +1,11 @@
-from machine import Pin, PWM
+from machine import Pin, PWM, I2C
 from time import sleep, ticks_ms
 #from bno055 import *  # IMU Library
 import ttyacm
 tty = ttyacm.open(1)
+
+## Credits
+print("\nRP2040 EW309 Turret Base Program\nVersion: WIP 7\nAuthored by Aaron Goff (͡°͜ʖ°)\n")
 
 # Define all functions
 
@@ -26,8 +29,8 @@ def generateDutyCycles(elev_error, azi_error, time_delta, sum_of_error_x, sum_of
 
 def centerTurret(tty):
     centering_speed = 0.2
-    print("START MATLAB NOW\n")
-    input("Press a button when MATLAB is started.\n")
+    print("Start MATLAB GUI and UVC Batch File Now\n")
+    input("Enter a character when MATLAB and UVC services are started: ")
     print("\nCENTERING TURRET VIA MATLAB\n")
     flag = 0
     while flag != 1:
@@ -55,6 +58,29 @@ def centerTurret(tty):
         # Actuate the motors with the floats
         actuateMotors(elev_float, azi_float)
     return
+
+def specifyTargets():
+    red = int(input("Any RED targets? (0/1): "))
+    yellow = int(input("Any YELLOW targets? (0/1): "))
+    orange = int(input("Any ORANGE targets? (0/1): "))
+    colors = [red,yellow,orange]
+    number_of_targets = int(input("Total number of targets: "))
+    distance_to_board = int(input("What POSITION is the turret in? (1/2/3): "))
+    print("Assuming targets are all of the MEDIUM size.")
+    
+    target_printout = ""
+    if red == 1:
+        target_printout = target_printout + "red "
+    if yellow == 1:
+        target_printout = target_printout + "yellow "
+    if orange == 1:
+        target_printout = target_printout + "orange "
+        
+    print("____________________________________________________\n")
+    print(f"Using corrections for position {distance_to_board}, the turret will engage {number_of_targets} target(s) of the following color(s): {target_printout}")
+    print("____________________________________________________\n")
+    
+    return colors, number_of_targets, distance_to_board
 
 def actuateMotors(elev_float, azi_float):
     elev_deadzone = 7500
@@ -120,20 +146,44 @@ def pulsed_proportional(elev_error, azi_error):
     sleep(pulse_duration*6)
     return
 
-def SHOOT():
+def shoot(shots_desired):
+    # Initial Variables
+    rounds_fired = 0
+    sensor_reset = True
+    base_current = 1800
+    # Current Sensor Definitions
+    INA260_ADDRESS = 0x40
+    INA260_CURRENT_REGISTER = 0x01
+    ina260_i2c = I2C(0, scl=Pin(1), sda=Pin(0))
+
     # Brake the motors
     yaw_motor_cw.duty_u16(65535)
     yaw_motor_ccw.duty_u16(65535)
     pitch_motor_up.duty_u16(65535)
     pitch_motor_down.duty_u16(65535)
-    # Fire the gun
+
+    # Let motors spool up
     roller_motors.duty_u16(65535)
-    sleep(3)  # Let motors spool up
-    belt_motor.duty_u16(65535)
-    sleep(5)  # FIRE!!!
+    sleep(3)
+
+    while rounds_fired < shots_desired:
+        belt_motor.duty_u16(65535)
+        data = ina260_i2c.readfrom_mem(INA260_ADDRESS, INA260_CURRENT_REGISTER, 2)
+        raw_current = int.from_bytes(data, 'big')
+        if raw_current & 0x8000:
+            raw_current -= 1 << 16
+        current_ma = raw_current * 1.25  # Convert to mA  
+        if current_ma > base_current and sensor_reset:
+            rounds_fired = rounds_fired + 1
+            sensor_reset = False
+            print(current_ma)
+        if current_ma < base_current:
+            sensor_reset = True
+        sleep(0.05)
+    
+    # Disable the Motors
     roller_motors.duty_u16(0)
     belt_motor.duty_u16(0)
-    sleep(100)
     return
 
 # ---------- Main Program ----------
@@ -145,6 +195,7 @@ pitch_motor_down.duty_u16(0)
 pitch_motor_up = PWM(Pin(13))
 pitch_motor_up.freq(500)
 pitch_motor_up.duty_u16(0)
+
 yaw_motor_ccw = PWM(Pin(9))
 yaw_motor_ccw.freq(500)
 yaw_motor_ccw.duty_u16(0)           
@@ -153,11 +204,14 @@ yaw_motor_cw.freq(500)
 yaw_motor_cw.duty_u16(0)
 
 roller_motors = PWM(Pin(15))
-roller_motors.freq(1500)
+roller_motors.freq(500)
 roller_motors.duty_u16(0)
 belt_motor = PWM(Pin(14))
-belt_motor.freq(1500)
+belt_motor.freq(500)
 belt_motor.duty_u16(0)
+
+# Ask the user for target details
+colors, number_of_targets, distance_to_board = specifyTargets()
 
 # Center the turret
 centerTurret(tty)
@@ -166,7 +220,9 @@ time_delta = 0
 sum_of_error_x = 0
 sum_of_error_y = 0
 pause_movement = False
-while True:
+targets_engaged = 0
+
+while targets_engaged < number_of_targets:
     start_time = ticks_ms() # Start collecting time
     
     pause_movement = False  # Reset pause variable
@@ -174,8 +230,8 @@ while True:
     # Tell laptop that the pico is ready for a serial command
     tty.print('1')
     
-    drop_compensation = 3
-    windage_compensation = 5
+    drop_compensation = 15
+    windage_compensation = 7
     # Receive command from laptop:
     command_from_laptop = tty.readline()
     command_from_laptop = command_from_laptop.split(",")
@@ -225,8 +281,12 @@ while True:
         print(command_from_laptop)
         
         if abs(elevation_error) < margin_lower_bound and abs(azimuth_error) < margin_lower_bound:
-            SHOOT()
+            shoot(2)
+            targets_engaged = targets_engaged + 1
+            sleep(5)
         
     # Print report
     time_delta = ticks_ms() - start_time # End collecting time
     print(f"Frames/Sec: {int(1000/time_delta)}\n")
+
+print("\n\nProgram Terminated")

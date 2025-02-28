@@ -182,15 +182,15 @@ while 1
         centroid = [NaN,NaN];
         centroid = filtered_red_props.Centroid(idx,:);
         % Determine elevation and azimuth errors
-        elevation_error = -int32((centroid(2)-drop_compensation)-y_res*scalingfactor/2);
-        azimuth_error = int32(centroid(1)-x_res*scalingfactor/2);
+        elevation_error = -int32((centroid(2))-y_res*scalingfactor/2);
+        azimuth_error = int32((centroid(1))-x_res*scalingfactor/2);
     catch
         elevation_error = 0;
         azimuth_error = 0;
     end
 
     % Send elevation and azimuth errors to pico
-    msg_to_pico = sprintf(('%d,%d'), elevation_error, azimuth_error)
+    msg_to_pico = sprintf(('%d,%d'), elevation_error, azimuth_error);
     s.writeline(msg_to_pico);
     
 end
