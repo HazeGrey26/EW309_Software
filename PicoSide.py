@@ -83,15 +83,15 @@ def specifyTargets():
     return colors, number_of_targets, distance_to_board
 
 def actuateMotors(elev_float, azi_float):
-    elev_deadzone = 7500
-    azi_deadzone = 7300
+    elev_deadzone = 7500  # Deadzone with a 500 duty cycle margin
+    azi_deadzone = 7500  # Deadzone with a 500 duty cycle margin
     
     elev_duty = int(abs(elev_float*65535) + elev_deadzone)
     azi_duty = int(abs(azi_float*65535) + azi_deadzone)
     if elev_duty > 65535: elev_duty = 65535
     if azi_duty > 65535: azi_duty = 65535
     
-    if elev_float > 0:
+    if elev_float < 0:
         pitch_motor_down.duty_u16(0)
         pitch_motor_up.duty_u16(elev_duty)
         print(f"Elev. Output: {int(elev_duty/65535*100)}%\n")
@@ -112,7 +112,7 @@ def actuateMotors(elev_float, azi_float):
 def pulsed_proportional(elev_error, azi_error):
     pulse_magnitude_x = 0.65
     pulse_magnitude_y = 0.5
-    pulse_duration = 0.008
+    pulse_duration = 0.012
     pulse_duty_x = int(pulse_magnitude_x*65535)
     pulse_duty_y = int(pulse_magnitude_y*65535)
     if elev_error == 0:
@@ -189,10 +189,10 @@ def shoot(shots_desired):
 # ---------- Main Program ----------
 
 # Initialize motors
-pitch_motor_down = PWM(Pin(12))
+pitch_motor_down = PWM(Pin(13))
 pitch_motor_down.freq(500)
 pitch_motor_down.duty_u16(0)
-pitch_motor_up = PWM(Pin(13))
+pitch_motor_up = PWM(Pin(12))
 pitch_motor_up.freq(500)
 pitch_motor_up.duty_u16(0)
 
@@ -239,12 +239,13 @@ while targets_engaged < number_of_targets:
     elevation_error = int(command_from_laptop[0]) + drop_compensation
     azimuth_error = int(command_from_laptop[1]) + windage_compensation
     
-    if elevation_error == azimuth_error == 0:
+    if (elevation_error - drop_compensation) == (azimuth_error - windage_compensation) == 0:
         pause_movement = True  # Stop the turret if no targets are seen, but keep sum of errors
         yaw_motor_cw.duty_u16(0)
         yaw_motor_ccw.duty_u16(0)
         pitch_motor_up.duty_u16(0)
         pitch_motor_down.duty_u16(0)
+        print("PAUSED")
     
     # Add to total error for integral
     sum_of_error_x = sum_of_error_x + azimuth_error

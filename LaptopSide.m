@@ -178,16 +178,21 @@ while 1
     % Choose a waypoint
     % "Right now, this just chooses the biggest target on the screen."
     try
-        [area, idx] = max(filtered_red_props.Area);
+        red_props_areas = [filtered_red_props.Area];
+        [area, idx] = max(red_props_areas);
         centroid = [NaN,NaN];
-        centroid = filtered_red_props.Centroid(idx,:);
+        centroids = [filtered_red_props.Centroid];
+        centroid = [centroids(idx*2-1),centroids(idx*2)];
+        center = [centroid(1) - (x_res*scalingfactor/2), centroid(2) - (y_res*scalingfactor/2)]
         % Determine elevation and azimuth errors
         elevation_error = -int32((centroid(2))-y_res*scalingfactor/2);
         azimuth_error = int32((centroid(1))-x_res*scalingfactor/2);
     catch
-        elevation_error = 0;
-        azimuth_error = 0;
-    end
+         elevation_error = 0;
+         azimuth_error = 0;
+         idx
+         centroids
+     end
 
     % Send elevation and azimuth errors to pico
     msg_to_pico = sprintf(('%d,%d'), elevation_error, azimuth_error);
